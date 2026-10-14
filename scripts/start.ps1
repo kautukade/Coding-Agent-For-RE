@@ -6,6 +6,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $StateRoot = Join-Path $env:LOCALAPPDATA 'RE-Coding-Agent'
 $StateFile = Join-Path $StateRoot 'state.json'
+$ConfigRoot = Join-Path $StateRoot 'config'
+$SecretsFile = Join-Path $ConfigRoot 'provider-secrets.json'
 
 function Refresh-Path {
     $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
@@ -38,6 +40,20 @@ function Test-OllamaApi([string]$HostValue) {
     }
 }
 
+function Import-ProviderSecrets {
+    if (-not (Test-Path $SecretsFile)) { return }
+    try {
+        $secrets = Get-Content $SecretsFile -Raw | ConvertFrom-Json
+        foreach ($property in $secrets.PSObject.Properties) {
+            if (-not [string]::IsNullOrWhiteSpace([string]$property.Value)) {
+                [Environment]::SetEnvironmentVariable($property.Name, [string]$property.Value, 'Process')
+            }
+        }
+    } catch {
+        Write-Warning "Could not load dashboard provider credentials: $($_.Exception.Message)"
+    }
+}
+
 Refresh-Path
 
 if (-not (Test-Path $StateFile)) {
@@ -54,6 +70,7 @@ $env:JAVA_HOME = [string]$state.javaHome
 $env:REA_ANALYSIS_PROVIDER = 'ghidra'
 $env:REA_GHIDRA_STARTUP_TIMEOUT_MS = '180000'
 $env:OPENCODE_CONFIG = [string]$state.openCodeConfig
+Import-ProviderSecrets
 
 if (-not (Test-Path $env:OPENCODE_CONFIG)) {
     Write-Host 'Managed OpenCode configuration is missing. Run INSTALL.bat to repair the installation.' -ForegroundColor Red
@@ -100,16 +117,23 @@ if (-not (Test-Path $ProjectPath)) {
     New-Item -ItemType Directory -Path $ProjectPath -Force | Out-Null
 }
 
+$currentModel = [string]$state.ollamaModel
+try {
+    $managedConfig = Get-Content $env:OPENCODE_CONFIG -Raw | ConvertFrom-Json
+    if ($managedConfig.model) { $currentModel = [string]$managedConfig.model }
+} catch { }
+
 Write-Host '============================================================' -ForegroundColor Cyan
 Write-Host ' RE Coding Agent' -ForegroundColor Cyan
 Write-Host '============================================================' -ForegroundColor Cyan
 Write-Host "Project : $ProjectPath"
-Write-Host "Model   : $($state.ollamaModel)"
-Write-Host "Context : $($state.context)"
+Write-Host "Model   : $currentModel"
+Write-Host "Context : $($state.context) local profile"
 Write-Host "Ollama  : $($state.ollamaHost)"
 Write-Host "Ghidra  : $($state.ghidraInstallDir)"
 Write-Host "Config  : $($state.openCodeConfig)"
 Write-Host 'REA MCP  : configured for OpenCode'
+Write-Host 'Cloud keys: loaded from Dashboard when configured'
 Write-Host ''
 
 Set-Location $ProjectPath
