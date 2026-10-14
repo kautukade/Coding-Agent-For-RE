@@ -4,10 +4,11 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$RepoRoot = Split-Path -Parent $PSScriptRoot
 $StateRoot = Join-Path $env:LOCALAPPDATA 'RE-Coding-Agent'
 $StateFile = Join-Path $StateRoot 'state.json'
-$ConfigRoot = Join-Path $StateRoot 'config'
-$SecretsFile = Join-Path $ConfigRoot 'provider-secrets.json'
+$RouterScript = Join-Path $RepoRoot 'dashboard\router.mjs'
+$RouterPort = 17322
 
 function Refresh-Path {
     $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
@@ -40,18 +41,44 @@ function Test-OllamaApi([string]$HostValue) {
     }
 }
 
-function Import-ProviderSecrets {
-    if (-not (Test-Path $SecretsFile)) { return }
+function Test-Router {
     try {
-        $secrets = Get-Content $SecretsFile -Raw | ConvertFrom-Json
-        foreach ($property in $secrets.PSObject.Properties) {
-            if (-not [string]::IsNullOrWhiteSpace([string]$property.Value)) {
-                [Environment]::SetEnvironmentVariable($property.Name, [string]$property.Value, 'Process')
-            }
-        }
+        $status = Invoke-RestMethod -Uri "http://127.0.0.1:$RouterPort/health" -TimeoutSec 2
+        return [bool]$status.ok
     } catch {
-        Write-Warning "Could not load dashboard provider credentials: $($_.Exception.Message)"
+        return $false
     }
+}
+
+function Ensure-Router {
+    if (Test-Router) { return }
+    if (-not (Test-Path $RouterScript)) {
+        throw "Hybrid router is missing: $RouterScript"
+    }
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+        throw 'Node.js is required to start the hybrid router.'
+    }
+
+    Write-Host 'Starting hybrid local + API model router ...' -ForegroundColor Cyan
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = (Get-Command node).Source
+    $startInfo.Arguments = "`"$RouterScript`""
+    $startInfo.WorkingDirectory = $RepoRoot
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.Environment['RE_ROUTER_PORT'] = [string]$RouterPort
+    if ($env:OLLAMA_HOST) { $startInfo.Environment['OLLAMA_HOST'] = $env:OLLAMA_HOST }
+    if ($env:OPENCODE_CONFIG) { $startInfo.Environment['OPENCODE_CONFIG'] = $env:OPENCODE_CONFIG }
+    if ($env:GHIDRA_INSTALL_DIR) { $startInfo.Environment['GHIDRA_INSTALL_DIR'] = $env:GHIDRA_INSTALL_DIR }
+    if ($env:JAVA_HOME) { $startInfo.Environment['JAVA_HOME'] = $env:JAVA_HOME }
+    $startInfo.Environment['REA_ANALYSIS_PROVIDER'] = 'ghidra'
+    [void][System.Diagnostics.Process]::Start($startInfo)
+
+    for ($i = 0; $i -lt 30; $i++) {
+        Start-Sleep -Milliseconds 300
+        if (Test-Router) { return }
+    }
+    throw 'Hybrid router did not become ready on 127.0.0.1:17322.'
 }
 
 Refresh-Path
@@ -70,7 +97,7 @@ $env:JAVA_HOME = [string]$state.javaHome
 $env:REA_ANALYSIS_PROVIDER = 'ghidra'
 $env:REA_GHIDRA_STARTUP_TIMEOUT_MS = '180000'
 $env:OPENCODE_CONFIG = [string]$state.openCodeConfig
-Import-ProviderSecrets
+$env:RE_ROUTER_PORT = [string]$RouterPort
 
 if (-not (Test-Path $env:OPENCODE_CONFIG)) {
     Write-Host 'Managed OpenCode configuration is missing. Run INSTALL.bat to repair the installation.' -ForegroundColor Red
@@ -109,6 +136,14 @@ if (-not (Get-Command opencode -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
+try {
+    Ensure-Router
+} catch {
+    Write-Host $_.Exception.Message -ForegroundColor Red
+    Read-Host 'Press Enter to close'
+    exit 1
+}
+
 if ([string]::IsNullOrWhiteSpace($ProjectPath)) {
     $ProjectPath = [string]$state.workspace
 }
@@ -117,23 +152,17 @@ if (-not (Test-Path $ProjectPath)) {
     New-Item -ItemType Directory -Path $ProjectPath -Force | Out-Null
 }
 
-$currentModel = [string]$state.ollamaModel
-try {
-    $managedConfig = Get-Content $env:OPENCODE_CONFIG -Raw | ConvertFrom-Json
-    if ($managedConfig.model) { $currentModel = [string]$managedConfig.model }
-} catch { }
-
 Write-Host '============================================================' -ForegroundColor Cyan
-Write-Host ' RE Coding Agent' -ForegroundColor Cyan
+Write-Host ' RE Coding Agent - Hybrid Runtime' -ForegroundColor Cyan
 Write-Host '============================================================' -ForegroundColor Cyan
 Write-Host "Project : $ProjectPath"
-Write-Host "Model   : $currentModel"
-Write-Host "Context : $($state.context) local profile"
+Write-Host "Local   : $($state.ollamaModel)"
+Write-Host "Context : $($state.context)"
 Write-Host "Ollama  : $($state.ollamaHost)"
+Write-Host "Router  : http://127.0.0.1:$RouterPort"
 Write-Host "Ghidra  : $($state.ghidraInstallDir)"
 Write-Host "Config  : $($state.openCodeConfig)"
 Write-Host 'REA MCP  : configured for OpenCode'
-Write-Host 'Cloud keys: loaded from Dashboard when configured'
 Write-Host ''
 
 Set-Location $ProjectPath
