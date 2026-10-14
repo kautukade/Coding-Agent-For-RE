@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RE Coding Agent Console</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #070a0f;
+      --panel: #0e131b;
+      --panel-2: #121925;
+      --line: #222d3c;
+      --text: #f4f7fb;
+      --muted: #8ea0b5;
+      --accent: #69e2ff;
+      --accent-2: #8d7cff;
+      --good: #59e391;
+      --warn: #ffbf69;
+      --bad: #ff6b7a;
+      --shadow: 0 24px 80px rgba(0,0,0,.36);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+      background:
+        radial-gradient(circle at 14% 10%, rgba(105,226,255,.08), transparent 34%),
+        radial-gradient(circle at 90% 14%, rgba(141,124,255,.08), transparent 28%),
+        var(--bg);
+      color: var(--text);
+    }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+    .shell { display: grid; grid-template-columns: 250px 1fr; min-height: 100vh; }
+    .sidebar {
+      border-right: 1px solid var(--line);
+      background: rgba(8,12,18,.88);
+      backdrop-filter: blur(18px);
+      padding: 24px 18px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+    }
+    .brand { display: flex; gap: 12px; align-items: center; margin-bottom: 30px; }
+    .brand-mark {
+      width: 42px; height: 42px; border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      display: grid; place-items: center; color: #051018; font-weight: 900;
+      box-shadow: 0 10px 30px rgba(105,226,255,.16);
+    }
+    .brand strong { display:block; font-size: 15px; }
+    .brand span { color: var(--muted); font-size: 12px; }
+    nav { display: grid; gap: 7px; }
+    .nav-btn {
+      border: 0; background: transparent; color: var(--muted); text-align: left;
+      padding: 11px 13px; border-radius: 10px; display: flex; align-items:center; gap:10px;
+    }
+    .nav-btn:hover, .nav-btn.active { background: #111824; color: var(--text); }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #4d5d70; }
+    .nav-btn.active .dot { background: var(--accent); box-shadow: 0 0 16px var(--accent); }
+    .side-footer { position: absolute; bottom: 22px; left: 18px; right: 18px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+    main { padding: 30px 34px 70px; max-width: 1500px; width: 100%; margin: 0 auto; }
+    .topbar { display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom: 28px; }
+    .title h1 { margin:0 0 5px; font-size: 25px; letter-spacing: -.5px; }
+    .title p { margin:0; color:var(--muted); font-size: 13px; }
+    .actions { display:flex; gap:9px; flex-wrap:wrap; justify-content:flex-end; }
+    .btn {
+      border: 1px solid var(--line); background: #111824; color: var(--text);
+      padding: 9px 13px; border-radius: 10px; transition: .18s ease;
+    }
+    .btn:hover { border-color: #3a4a60; transform: translateY(-1px); }
+    .btn.primary { background: linear-gradient(135deg, #66dffb, #8978f7); color: #061018; border:0; font-weight:800; }
+    .btn.good { border-color: rgba(89,227,145,.35); color: var(--good); }
+    .btn.danger { border-color: rgba(255,107,122,.3); color: var(--bad); }
+    .view { display:none; }
+    .view.active { display:block; }
+    .grid { display:grid; gap:16px; }
+    .grid.cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .card {
+      background: linear-gradient(180deg, rgba(18,25,37,.94), rgba(13,18,27,.94));
+      border: 1px solid var(--line); border-radius: 15px; padding: 18px;
+      box-shadow: var(--shadow);
+    }
+    .card h3 { margin:0 0 8px; font-size:14px; }
+    .card p { margin:0; color:var(--muted); font-size:12px; line-height:1.55; }
+    .metric { font-size: 23px; font-weight:800; margin-top:13px; letter-spacing:-.5px; }
+    .status-row { display:flex; align-items:center; gap:8px; margin-top:12px; color:var(--muted); font-size:12px; }
+    .pill { border-radius:99px; padding:4px 8px; font-size:11px; border:1px solid var(--line); }
+    .pill.good { color:var(--good); border-color:rgba(89,227,145,.3); background:rgba(89,227,145,.06); }
+    .pill.bad { color:var(--bad); border-color:rgba(255,107,122,.3); background:rgba(255,107,122,.06); }
+    .pill.warn { color:var(--warn); border-color:rgba(255,191,105,.3); background:rgba(255,191,105,.06); }
+    .section-head { margin: 28px 0 13px; display:flex; align-items:end; justify-content:space-between; gap:16px; }
+    .section-head h2 { margin:0 0 5px; font-size:17px; }
+    .section-head p { margin:0; color:var(--muted); font-size:12px; }
+    .health-list { display:grid; gap:10px; }
+    .health-item { display:flex; justify-content:space-between; gap:14px; align-items:center; padding:12px 0; border-bottom:1px solid rgba(34,45,60,.65); }
+    .health-item:last-child { border-bottom:0; }
+    .health-name strong { display:block; font-size:13px; }
+    .health-name span { color:var(--muted); font-size:11px; }
+    .provider-grid { display:grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap:16px; }
+    .provider-card { position:relative; overflow:hidden; }
+    .provider-card::before { content:""; position:absolute; inset:0 auto auto 0; height:2px; width:100%; background:linear-gradient(90deg,var(--accent),var(--accent-2)); opacity:.45; }
+    .provider-head { display:flex; justify-content:space-between; align-items:start; gap:10px; margin-bottom:16px; }
+    .provider-head h3 { font-size:15px; margin:0 0 4px; }
+    .provider-head p { font-size:11px; }
+    .toggle { display:inline-flex; align-items:center; gap:8px; color:var(--muted); font-size:11px; }
+    .toggle input { accent-color:#70def8; }
+    .field { display:grid; gap:6px; margin-top:12px; }
+    .field label { font-size:11px; color:#b5c2d0; }
+    .field input, .field select {
+      width:100%; border:1px solid var(--line); background:#0a1018; color:var(--text);
+      border-radius:9px; padding:10px 11px; outline:none;
+    }
+    .field input:focus, .field select:focus { border-color:#4f7d9c; box-shadow:0 0 0 3px rgba(105,226,255,.05); }
+    .provider-actions { display:flex; gap:8px; margin-top:14px; }
+    .provider-actions .btn { flex:1; }
+    .default-box { display:flex; gap:15px; align-items:center; flex-wrap:wrap; }
+    .default-box select { min-width:260px; }
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background:#080d14; border:1px solid var(--line); border-radius:10px; padding:12px;
+      color:#b9c8d8; font-size:11px; overflow:auto; white-space:pre-wrap; word-break:break-word;
+    }
+    .toast-wrap { position:fixed; right:22px; bottom:22px; z-index:30; display:grid; gap:8px; }
+    .toast { min-width:280px; max-width:430px; background:#111925; border:1px solid var(--line); border-radius:11px; padding:12px 14px; box-shadow:var(--shadow); font-size:12px; }
+    .toast.good { border-color:rgba(89,227,145,.4); }
+    .toast.bad { border-color:rgba(255,107,122,.4); }
+    .small { font-size:11px; color:var(--muted); }
+    .path { word-break:break-all; }
+    .rea-hero { display:grid; grid-template-columns: 1.3fr .7fr; gap:16px; }
+    .rea-flow { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:18px; }
+    .node { padding:8px 11px; border:1px solid var(--line); border-radius:9px; background:#0b1119; font-size:11px; }
+    .arrow { color:#4c6077; }
+    @media (max-width: 1100px) {
+      .grid.cards { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .provider-grid { grid-template-columns: 1fr; }
+      .rea-hero, .grid.two { grid-template-columns:1fr; }
+    }
+    @media (max-width: 760px) {
+      .shell { grid-template-columns:1fr; }
+      .sidebar { position:relative; height:auto; border-right:0; border-bottom:1px solid var(--line); }
+      nav { grid-template-columns:repeat(4,1fr); }
+      .nav-btn { justify-content:center; font-size:0; }
+      .nav-btn .dot { width:9px; height:9px; }
+      .side-footer { display:none; }
+      main { padding:22px 16px 50px; }
+      .topbar { align-items:flex-start; flex-direction:column; }
+      .actions { justify-content:flex-start; }
+      .grid.cards { grid-template-columns:1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">RE</div>
+        <div><strong>Coding Agent</strong><span>Local + Cloud Control</span></div>
+      </div>
+      <nav>
+        <button class="nav-btn active" data-view="overview"><span class="dot"></span>Overview</button>
+        <button class="nav-btn" data-view="providers"><span class="dot"></span>Configuration</button>
+        <button class="nav-btn" data-view="rea"><span class="dot"></span>REA</button>
+        <button class="nav-btn" data-view="system"><span class="dot"></span>System</button>
+      </nav>
+      <div class="side-footer">Runs only on <strong>127.0.0.1</strong>.<br/>API keys are never returned to the browser after saving.</div>
+    </aside>
+
+    <main>
+      <div class="topbar">
+        <div class="title"><h1 id="page-title">System Overview</h1><p id="page-subtitle">One console for your local coding and reverse-engineering stack.</p></div>
+        <div class="actions">
+          <button class="btn" id="refresh-btn">Refresh</button>
+          <button class="btn" id="workspace-btn">Open Workspace</button>
+          <button class="btn primary" id="launch-btn">Launch Agent</button>
+        </div>
+      </div>
+
+      <section class="view active" id="view-overview">
+        <div class="grid cards">
+          <div class="card"><h3>Active model</h3><p>OpenCode default</p><div class="metric" id="metric-model">—</div><div class="status-row"><span id="default-provider-pill" class="pill">Loading</span></div></div>
+          <div class="card"><h3>Local inference</h3><p>Ollama runtime</p><div class="metric" id="metric-ollama">—</div><div class="status-row" id="ollama-detail">Checking…</div></div>
+          <div class="card"><h3>REA MCP</h3><p>Reverse-engineering bridge</p><div class="metric" id="metric-rea">—</div><div class="status-row" id="rea-detail">Checking…</div></div>
+          <div class="card"><h3>Native analysis</h3><p>Ghidra provider</p><div class="metric" id="metric-ghidra">—</div><div class="status-row" id="ghidra-detail">Checking…</div></div>
+        </div>
+
+        <div class="section-head"><div><h2>System health</h2><p>What is ready before you launch an agent session.</p></div></div>
+        <div class="grid two">
+          <div class="card health-list" id="health-list"></div>
+          <div class="card">
+            <h3>Connected model sources</h3>
+            <p>Local remains available even when cloud API keys are missing or rate-limited.</p>
+            <div class="health-list" id="provider-summary"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-providers">
+        <div class="card" style="margin-bottom:16px">
+          <div class="default-box">
+            <div style="flex:1"><h3>Default model source</h3><p>Choose what a new OpenCode session should use. If the selected cloud key is missing, the dashboard safely falls back to local Qwen.</p></div>
+            <div class="field" style="margin:0">
+              <label for="default-provider">Default provider</label>
+              <select id="default-provider">
+                <option value="local">Local — Qwen via Ollama</option>
+                <option value="nvidia">NVIDIA NIM</option>
+                <option value="openrouter">OpenRouter</option>
+                <option value="huggingface">Hugging Face</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="provider-grid">
+          <article class="card provider-card" data-provider-card="nvidia">
+            <div class="provider-head"><div><h3>NVIDIA NIM</h3><p>Strong cloud fallback for coding, reasoning and agents.</p></div><label class="toggle"><input type="checkbox" data-field="enabled"/> Enabled</label></div>
+            <div class="field"><label>API key</label><input type="password" data-field="apiKey" autocomplete="off" placeholder="Paste NVIDIA API key"/></div>
+            <div class="small" data-field="keyState">Not configured</div>
+            <div class="field"><label>Model ID</label><input data-field="model" value="nvidia/nemotron-3-super-120b-a12b"/></div>
+            <div class="field"><label>Base URL</label><input data-field="baseURL" value="https://integrate.api.nvidia.com/v1"/></div>
+            <div class="provider-actions"><button class="btn" data-test="nvidia">Test key</button><button class="btn danger" data-clear="nvidia">Clear key</button></div>
+          </article>
+
+          <article class="card provider-card" data-provider-card="openrouter">
+            <div class="provider-head"><div><h3>OpenRouter</h3><p>Free router + many online models behind one key.</p></div><label class="toggle"><input type="checkbox" data-field="enabled"/> Enabled</label></div>
+            <div class="field"><label>API key</label><input type="password" data-field="apiKey" autocomplete="off" placeholder="Paste OpenRouter API key"/></div>
+            <div class="small" data-field="keyState">Not configured</div>
+            <div class="field"><label>Model ID</label><input data-field="model" value="openrouter/free"/></div>
+            <div class="field"><label>Base URL</label><input data-field="baseURL" value="https://openrouter.ai/api/v1"/></div>
+            <div class="provider-actions"><button class="btn" data-test="openrouter">Test key</button><button class="btn danger" data-clear="openrouter">Clear key</button></div>
+          </article>
+
+          <article class="card provider-card" data-provider-card="huggingface">
+            <div class="provider-head"><div><h3>Hugging Face</h3><p>Inference Providers with OpenAI-compatible routing.</p></div><label class="toggle"><input type="checkbox" data-field="enabled"/> Enabled</label></div>
+            <div class="field"><label>API token</label><input type="password" data-field="apiKey" autocomplete="off" placeholder="Paste Hugging Face token"/></div>
+            <div class="small" data-field="keyState">Not configured</div>
+            <div class="field"><label>Model ID</label><input data-field="model" value="openai/gpt-oss-120b:fastest"/></div>
+            <div class="field"><label>Base URL</label><input data-field="baseURL" value="https://router.huggingface.co/v1"/></div>
+            <div class="provider-actions"><button class="btn" data-test="huggingface">Test key</button><button class="btn danger" data-clear="huggingface">Clear key</button></div>
+          </article>
+        </div>
+
+        <div class="section-head"><div><h2>Apply configuration</h2><p>No terminal editing required. Saving updates the managed OpenCode config automatically.</p></div></div>
+        <div class="card" style="display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap">
+          <button class="btn" id="reload-settings-btn">Discard changes</button>
+          <button class="btn primary" id="save-settings-btn">Save & Apply</button>
+        </div>
+      </section>
+
+      <section class="view" id="view-rea">
+        <div class="rea-hero">
+          <div class="card">
+            <h3>REA integration</h3>
+            <p>REA is registered as an MCP server inside the managed OpenCode configuration. Ghidra is passed into the REA server environment for deep native analysis.</p>
+            <div class="rea-flow"><span class="node">OpenCode Agent</span><span class="arrow">→</span><span class="node">REA MCP</span><span class="arrow">→</span><span class="node">Ghidra</span><span class="arrow">→</span><span class="node">Evidence</span></div>
+            <div style="margin-top:18px; display:flex; gap:9px"><button class="btn primary" id="doctor-btn">Run REA Doctor</button><button class="btn" id="refresh-rea-btn">Refresh status</button></div>
+          </div>
+          <div class="card"><h3>Integration state</h3><div class="health-list" id="rea-status-list"></div></div>
+        </div>
+        <div class="section-head"><div><h2>Doctor output</h2><p>Diagnostic output from the installed REA CLI.</p></div></div>
+        <div class="mono" id="doctor-output">Run REA Doctor to verify the MCP registration and skill.</div>
+      </section>
+
+      <section class="view" id="view-system">
+        <div class="grid two">
+          <div class="card"><h3>Runtime paths</h3><div class="health-list" id="paths-list"></div></div>
+          <div class="card"><h3>Quick actions</h3><p>These actions use the managed local configuration.</p><div style="display:grid;gap:9px;margin-top:16px"><button class="btn primary" id="sys-launch-btn">Launch OpenCode + REA</button><button class="btn" id="sys-workspace-btn">Open RE Workspace</button><button class="btn" id="sync-config-btn">Rebuild OpenCode config</button></div></div>
+        </div>
+        <div class="section-head"><div><h2>Security notes</h2><p>Designed for a single Windows user on the local machine.</p></div></div>
+        <div class="card"><p>The dashboard binds to <strong>127.0.0.1</strong> only. Saved API keys are kept in the local application configuration and are not returned in API responses. The secrets file is restricted to the current Windows user on a best-effort basis. OpenCode receives keys only as environment variables when the agent starts.</p></div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast-wrap" id="toasts"></div>
+
+<script>
+const $ = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => [...r.querySelectorAll(s)];
+const titles = {
+  overview: ['System Overview', 'One console for your local coding and reverse-engineering stack.'],
+  providers: ['Configuration', 'Paste an API key, test it, save it — no manual config editing.'],
+  rea: ['REA Integration', 'Verify OpenCode → REA MCP → Ghidra from one place.'],
+  system: ['System', 'Runtime paths, launcher controls and managed configuration.']
+};
+let statusCache = null;
+let settingsCache = null;
+let clearFlags = {};
+
+function toast(message, type='good') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = message;
+  $('#toasts').append(el);
+  setTimeout(() => el.remove(), 4200);
+}
+
+async function api(path, options={}) {
+  const res = await fetch(path, {
+    ...options,
+    headers: {'Content-Type':'application/json', ...(options.headers||{})}
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || data.output || `HTTP ${res.status}`);
+  return data;
+}
+
+function pill(ok, yes='Ready', no='Issue') {
+  return `<span class="pill ${ok ? 'good' : 'bad'}">${ok ? yes : no}</span>`;
+}
+
+function nav(view) {
+  $$('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  $$('.view').forEach(v => v.classList.toggle('active', v.id === `view-${view}`));
+  $('#page-title').textContent = titles[view][0];
+  $('#page-subtitle').textContent = titles[view][1];
+}
+
+$$('.nav-btn').forEach(b => b.addEventListener('click', () => nav(b.dataset.view)));
+
+function healthItem(name, detail, ok, positive='Ready', negative='Unavailable') {
+  return `<div class="health-item"><div class="health-name"><strong>${name}</strong><span>${detail || ''}</span></div>${pill(ok, positive, negative)}</div>`;
+}
+
+async function loadStatus() {
+  try {
+    statusCache = await api('/api/status');
+    const s = statusCache;
+    $('#metric-model').textContent = (s.currentModel || '—').split('/').slice(-1)[0];
+    $('#default-provider-pill').className = 'pill good';
+    $('#default-provider-pill').textContent = `Default: ${s.defaultProvider}`;
+
+    $('#metric-ollama').textContent = s.ollama.ok ? 'Online' : 'Offline';
+    $('#metric-ollama').style.color = s.ollama.ok ? 'var(--good)' : 'var(--bad)';
+    $('#ollama-detail').innerHTML = `${pill(s.ollama.ok)} <span>${s.ollama.host || ''}</span>`;
+
+    $('#metric-rea').textContent = s.rea.integrated ? 'Connected' : 'Not linked';
+    $('#metric-rea').style.color = s.rea.integrated ? 'var(--good)' : 'var(--bad)';
+    $('#rea-detail').innerHTML = `${pill(s.rea.integrated)} <span>OpenCode MCP</span>`;
+
+    $('#metric-ghidra').textContent = s.ghidra.ok ? 'Ready' : 'Missing';
+    $('#metric-ghidra').style.color = s.ghidra.ok ? 'var(--good)' : 'var(--bad)';
+    $('#ghidra-detail').innerHTML = `${pill(s.ghidra.ok)} <span>Native analysis</span>`;
+
+    $('#health-list').innerHTML = [
+      healthItem('OpenCode', s.opencode.value, s.opencode.ok),
+      healthItem('REA CLI', s.reaCli.value, s.reaCli.ok),
+      healthItem('REA MCP', 'Registered in managed OpenCode config', s.rea.integrated),
+      healthItem('Ghidra', s.ghidra.path || 'Not found', s.ghidra.ok),
+      healthItem('Ollama', `${s.ollama.models?.length || 0} model(s) detected`, s.ollama.ok)
+    ].join('');
+
+    const providerLabels = {nvidia:'NVIDIA NIM',openrouter:'OpenRouter',huggingface:'Hugging Face'};
+    $('#provider-summary').innerHTML = [
+      healthItem('Local Qwen', s.ollama.ok ? 'Always available locally' : 'Ollama offline', s.ollama.ok),
+      ...Object.entries(s.providers).map(([k,v]) => healthItem(providerLabels[k], v.configured ? v.model : 'API key not saved', v.enabled && v.configured, 'Enabled', v.configured ? 'Disabled' : 'No key'))
+    ].join('');
+
+    $('#rea-status-list').innerHTML = [
+      healthItem('MCP registration', 'REA server entry in OpenCode', s.rea.integrated),
+      healthItem('Ghidra environment', 'GHIDRA_INSTALL_DIR supplied to REA', s.rea.ghidraEnvironment),
+      healthItem('Ghidra files', s.ghidra.path || 'Not found', s.ghidra.ok),
+      healthItem('REA CLI', s.reaCli.value, s.reaCli.ok)
+    ].join('');
+
+    $('#paths-list').innerHTML = [
+      healthItem('Workspace', `<span class="path">${s.workspace || '—'}</span>`, Boolean(s.workspace)),
+      healthItem('Managed config', `<span class="path">${s.paths.openCodeConfig}</span>`, true),
+      healthItem('State root', `<span class="path">${s.paths.stateRoot}</span>`, true)
+    ].join('');
+  } catch (e) {
+    toast(`Status refresh failed: ${e.message}`, 'bad');
+  }
+}
+
+function card(provider) { return $(`[data-provider-card="${provider}"]`); }
+
+async function loadSettings() {
+  settingsCache = await api('/api/settings');
+  clearFlags = {};
+  $('#default-provider').value = settingsCache.defaultProvider || 'local';
+  for (const [name, value] of Object.entries(settingsCache.providers || {})) {
+    const c = card(name);
+    if (!c) continue;
+    $('[data-field="enabled"]', c).checked = Boolean(value.enabled);
+    $('[data-field="model"]', c).value = value.model || value.defaultModel || '';
+    $('[data-field="baseURL"]', c).value = value.baseURL || '';
+    $('[data-field="apiKey"]', c).value = '';
+    $('[data-field="apiKey"]', c).placeholder = value.configured ? `Saved ${value.maskedKey}` : 'Paste API key';
+    $('[data-field="keyState"]', c).textContent = value.configured ? `Configured · ${value.maskedKey}` : 'Not configured';
+  }
+}
+
+function collectSettings() {
+  const providers = {};
+  for (const name of ['nvidia','openrouter','huggingface']) {
+    const c = card(name);
+    providers[name] = {
+      enabled: $('[data-field="enabled"]', c).checked,
+      apiKey: $('[data-field="apiKey"]', c).value.trim(),
+      model: $('[data-field="model"]', c).value.trim(),
+      baseURL: $('[data-field="baseURL"]', c).value.trim(),
+      clearKey: Boolean(clearFlags[name])
+    };
+  }
+  return { defaultProvider: $('#default-provider').value, providers };
+}
+
+async function saveSettings() {
+  const btn = $('#save-settings-btn');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    const result = await api('/api/settings', {method:'POST', body:JSON.stringify(collectSettings())});
+    toast(`${result.message} Default model: ${result.defaultModel}`);
+    await loadSettings();
+    await loadStatus();
+  } catch (e) {
+    toast(`Save failed: ${e.message}`, 'bad');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save & Apply';
+  }
+}
+
+async function testProvider(name) {
+  const c = card(name);
+  const key = $('[data-field="apiKey"]', c).value.trim();
+  const button = $(`[data-test="${name}"]`);
+  const original = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Testing…';
+  try {
+    const result = await api('/api/test-provider', {method:'POST', body:JSON.stringify({provider:name, apiKey:key || undefined})});
+    toast(result.message);
+  } catch (e) {
+    toast(`${name} test failed: ${e.message}`, 'bad');
+  } finally {
+    button.disabled = false;
+    button.textContent = original;
+  }
+}
+
+for (const name of ['nvidia','openrouter','huggingface']) {
+  $(`[data-test="${name}"]`).addEventListener('click', () => testProvider(name));
+  $(`[data-clear="${name}"]`).addEventListener('click', () => {
+    clearFlags[name] = true;
+    const c = card(name);
+    $('[data-field="apiKey"]', c).value = '';
+    $('[data-field="apiKey"]', c).placeholder = 'Key will be removed on Save';
+    $('[data-field="keyState"]', c).textContent = 'Marked for removal';
+    toast(`${name} key marked for removal. Click Save & Apply.`);
+  });
+}
+
+async function launchAgent() {
+  try {
+    const r = await api('/api/launch-agent', {method:'POST', body:'{}'});
+    toast(r.message);
+  } catch (e) { toast(`Launch failed: ${e.message}`, 'bad'); }
+}
+
+async function openWorkspace() {
+  try { await api('/api/open-workspace', {method:'POST', body:'{}'}); }
+  catch (e) { toast(`Could not open workspace: ${e.message}`, 'bad'); }
+}
+
+async function runDoctor() {
+  const out = $('#doctor-output');
+  out.textContent = 'Running REA Doctor…';
+  try {
+    const result = await api('/api/rea-doctor', {method:'POST', body:'{}'});
+    out.textContent = result.output || 'REA Doctor completed successfully.';
+    toast('REA Doctor completed.');
+    await loadStatus();
+  } catch (e) {
+    out.textContent = e.message;
+    toast('REA Doctor reported an issue.', 'bad');
+  }
+}
+
+$('#save-settings-btn').addEventListener('click', saveSettings);
+$('#reload-settings-btn').addEventListener('click', () => loadSettings().then(() => toast('Unsaved changes discarded.')));
+$('#refresh-btn').addEventListener('click', () => Promise.all([loadStatus(), loadSettings()]).then(() => toast('Status refreshed.')));
+$('#refresh-rea-btn').addEventListener('click', loadStatus);
+$('#doctor-btn').addEventListener('click', runDoctor);
+$('#launch-btn').addEventListener('click', launchAgent);
+$('#sys-launch-btn').addEventListener('click', launchAgent);
+$('#workspace-btn').addEventListener('click', openWorkspace);
+$('#sys-workspace-btn').addEventListener('click', openWorkspace);
+$('#sync-config-btn').addEventListener('click', async () => {
+  try {
+    const r = await api('/api/refresh-config', {method:'POST', body:'{}'});
+    toast(`OpenCode config rebuilt. Model: ${r.model}`);
+    await loadStatus();
+  } catch (e) { toast(`Config refresh failed: ${e.message}`, 'bad'); }
+});
+
+Promise.all([loadStatus(), loadSettings()]).catch(e => toast(e.message, 'bad'));
+setInterval(loadStatus, 30000);
+</script>
+</body>
+</html>
