@@ -28,14 +28,22 @@ jobs:
           }
           if ($failed) { throw 'PowerShell syntax validation failed.' }
 
+      - name: Validate dashboard backend syntax
+        shell: pwsh
+        run: node --check dashboard/server.mjs
+
       - name: Check required entry points
         shell: pwsh
         run: |
           $required = @(
             'INSTALL.bat',
+            'DASHBOARD.bat',
             'START-RE-AGENT.bat',
             'UPDATE.bat',
+            'dashboard/server.mjs',
+            'dashboard/index.html',
             'scripts/install.ps1',
+            'scripts/dashboard-install.ps1',
             'scripts/start.ps1'
           )
           foreach ($file in $required) {
