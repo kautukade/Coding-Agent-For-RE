@@ -1,0 +1,43 @@
+name: Validate installer
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  syntax:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Parse PowerShell scripts
+        shell: pwsh
+        run: |
+          $failed = $false
+          Get-ChildItem -Path scripts -Filter *.ps1 -File | ForEach-Object {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors)
+            if ($errors.Count -gt 0) {
+              Write-Host "Syntax errors in $($_.Name):" -ForegroundColor Red
+              $errors | ForEach-Object { Write-Host $_ }
+              $failed = $true
+            }
+          }
+          if ($failed) { throw 'PowerShell syntax validation failed.' }
+
+      - name: Check required entry points
+        shell: pwsh
+        run: |
+          $required = @(
+            'INSTALL.bat',
+            'START-RE-AGENT.bat',
+            'UPDATE.bat',
+            'scripts/install.ps1',
+            'scripts/start.ps1'
+          )
+          foreach ($file in $required) {
+            if (-not (Test-Path $file)) { throw "Missing required file: $file" }
+          }
