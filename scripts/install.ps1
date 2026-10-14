@@ -13,6 +13,7 @@ $ToolsRoot = Join-Path $StateRoot 'tools'
 $LogRoot = Join-Path $StateRoot 'logs'
 $StateFile = Join-Path $StateRoot 'state.json'
 $ConfigRoot = Join-Path $StateRoot 'config'
+$OpenCodeConfig = Join-Path $ConfigRoot 'opencode.json'
 
 foreach ($dir in @($StateRoot, $ToolsRoot, $LogRoot, $ConfigRoot)) {
     New-Item -ItemType Directory -Path $dir -Force | Out-Null
@@ -135,14 +136,13 @@ function Get-OllamaHost {
 }
 
 function Normalize-OllamaClientHost([string]$HostValue) {
-    $hostOnly = $HostValue
-    if ($hostOnly -match '^(0\.0\.0\.0|\[::\]|::):(\d+)$') {
+    if ($HostValue -match '^(0\.0\.0\.0|\[::\]|::):(\d+)$') {
         return "127.0.0.1:$($Matches[2])"
     }
-    if ($hostOnly -match '^localhost:(\d+)$') {
+    if ($HostValue -match '^localhost:(\d+)$') {
         return "127.0.0.1:$($Matches[1])"
     }
-    return $hostOnly
+    return $HostValue
 }
 
 function Test-OllamaApi([string]$HostValue) {
@@ -156,7 +156,7 @@ function Test-OllamaApi([string]$HostValue) {
 function Test-LocalPortFree([int]$Port) {
     $listener = $null
     try {
-        $listener = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Loopback, $Port)
+        $listener = New-Object System.Net.Sockets.TcpListener -ArgumentList @([System.Net.IPAddress]::Loopback, $Port)
         $listener.Start()
         return $true
     } catch {
@@ -279,7 +279,15 @@ function Ensure-OpenCode {
     & npm install -g '@opencode/cli@latest'
     Refresh-Path
 
-    if (-not (Test-Command 'opencode')) {
+    $working = $false
+    if (Test-Command 'opencode') {
+        try {
+            & opencode --version
+            if ($LASTEXITCODE -eq 0) { $working = $true }
+        } catch { }
+    }
+
+    if (-not $working) {
         $npmRoot = (& npm root -g).Trim()
         $postInstall = Join-Path $npmRoot '@opencode\cli\postinstall.mjs'
         if (Test-Path $postInstall) {
@@ -288,8 +296,10 @@ function Ensure-OpenCode {
             Refresh-Path
         }
     }
+
     if (-not (Test-Command 'opencode')) { throw 'OpenCode installation verification failed.' }
     & opencode --version
+    if ($LASTEXITCODE -ne 0) { throw 'OpenCode is installed but did not start correctly.' }
 }
 
 function Ensure-Rea {
@@ -301,21 +311,18 @@ function Ensure-Rea {
 }
 
 function Configure-OpenCode([string]$OllamaHost, [int]$ContextSize, [string]$GhidraDir, [string]$JavaHome) {
-    $configDir = Join-Path $HOME '.config\opencode'
-    $configPath = Join-Path $configDir 'opencode.json'
-    New-Item -ItemType Directory -Path $configDir -Force | Out-Null
-
+    $configPath = $OpenCodeConfig
     if (-not (Test-Path $configPath)) {
         '{}' | Set-Content -Path $configPath -Encoding UTF8
     }
 
-    Copy-Item $configPath "$configPath.coding-agent-re.backup-$timestamp" -Force
+    Copy-Item $configPath "$configPath.backup-$timestamp" -Force
 
     $raw = Get-Content $configPath -Raw
     try {
         $config = $raw | ConvertFrom-Json
     } catch {
-        throw "OpenCode config is not strict JSON and could not be safely updated automatically. Backup: $configPath.coding-agent-re.backup-$timestamp"
+        throw "Managed OpenCode config is invalid JSON: $configPath"
     }
 
     if ($null -eq $config) { $config = [pscustomobject]@{} }
@@ -363,19 +370,26 @@ function Configure-OpenCode([string]$OllamaHost, [int]$ContextSize, [string]$Ghi
         }
     }
 
-    if ($reaEntry) {
-        $environment = [pscustomobject]@{
-            GHIDRA_INSTALL_DIR = $GhidraDir
-            JAVA_HOME = $JavaHome
-            REA_ANALYSIS_PROVIDER = 'ghidra'
+    if (-not $reaEntry) {
+        throw 'REA setup completed, but the managed OpenCode config does not contain an REA MCP registration.'
+    }
+
+    $environment = [pscustomobject]@{
+        GHIDRA_INSTALL_DIR = $GhidraDir
+        JAVA_HOME = $JavaHome
+        REA_ANALYSIS_PROVIDER = 'ghidra'
+        REA_GHIDRA_STARTUP_TIMEOUT_MS = '180000'
+    }
+
+    if ($reaEntry.PSObject.Properties['environment']) {
+        if ($null -eq $reaEntry.environment) {
+            $reaEntry.environment = [pscustomobject]@{}
         }
-        if ($reaEntry.PSObject.Properties['environment']) {
-            foreach ($p in $environment.PSObject.Properties) {
-                $reaEntry.environment | Add-Member -NotePropertyName $p.Name -NotePropertyValue $p.Value -Force
-            }
-        } else {
-            $reaEntry | Add-Member -NotePropertyName 'environment' -NotePropertyValue $environment
+        foreach ($p in $environment.PSObject.Properties) {
+            $reaEntry.environment | Add-Member -NotePropertyName $p.Name -NotePropertyValue $p.Value -Force
         }
+    } else {
+        $reaEntry | Add-Member -NotePropertyName 'environment' -NotePropertyValue $environment
     }
 
     $config | ConvertTo-Json -Depth 50 | Set-Content -Path $configPath -Encoding UTF8
@@ -462,23 +476,33 @@ PARAMETER temperature 0.2
     $ghidraDir = Get-GhidraInstall
     $env:GHIDRA_INSTALL_DIR = $ghidraDir
     $env:REA_ANALYSIS_PROVIDER = 'ghidra'
+    $env:REA_GHIDRA_STARTUP_TIMEOUT_MS = '180000'
     [Environment]::SetEnvironmentVariable('GHIDRA_INSTALL_DIR', $ghidraDir, 'User')
     [Environment]::SetEnvironmentVariable('REA_ANALYSIS_PROVIDER', 'ghidra', 'User')
+    [Environment]::SetEnvironmentVariable('REA_GHIDRA_STARTUP_TIMEOUT_MS', '180000', 'User')
     Write-Host "GHIDRA_INSTALL_DIR=$ghidraDir" -ForegroundColor Green
 
     Write-Step '6/8  OpenCode + REA'
     Ensure-OpenCode
     Ensure-Rea
 
-    Write-Host 'Registering REA with OpenCode (non-interactive) ...'
+    # Use a dedicated OpenCode config owned by this project. This keeps the
+    # one-click RE agent isolated from the user's normal OpenCode configuration.
+    $env:OPENCODE_CONFIG = $OpenCodeConfig
+    if (-not (Test-Path $OpenCodeConfig)) {
+        '{}' | Set-Content -Path $OpenCodeConfig -Encoding UTF8
+    }
+
+    Write-Host 'Registering REA with the managed OpenCode config (non-interactive) ...'
     & rea setup --yes --client opencode
     if ($LASTEXITCODE -ne 0) { throw 'REA OpenCode setup failed.' }
 
     Write-Step '7/8  Configuring local model + provider environment'
-    $openCodeConfig = Configure-OpenCode -OllamaHost $ollamaHost -ContextSize $contextSize -GhidraDir $ghidraDir -JavaHome $javaHome
-    Write-Host "OpenCode config: $openCodeConfig" -ForegroundColor Green
+    $openCodeConfigPath = Configure-OpenCode -OllamaHost $ollamaHost -ContextSize $contextSize -GhidraDir $ghidraDir -JavaHome $javaHome
+    Write-Host "OpenCode config: $openCodeConfigPath" -ForegroundColor Green
 
     Write-Step '8/8  Verification and launcher'
+    $env:OPENCODE_CONFIG = $openCodeConfigPath
     $modelList = (& opencode models --standalone 2>&1 | Out-String)
     if ($modelList -notmatch 'ollama/rea-qwen-coder') {
         throw 'OpenCode does not list ollama/rea-qwen-coder after configuration.'
@@ -503,7 +527,7 @@ PARAMETER temperature 0.2
         context = $contextSize
         javaHome = $javaHome
         ghidraInstallDir = $ghidraDir
-        openCodeConfig = $openCodeConfig
+        openCodeConfig = $openCodeConfigPath
         installLog = $LogFile
     }
     $state | ConvertTo-Json -Depth 10 | Set-Content -Path $StateFile -Encoding UTF8
@@ -512,9 +536,10 @@ PARAMETER temperature 0.2
 
     Write-Host "`nSUCCESS: RE Coding Agent is ready." -ForegroundColor Green
     Write-Host "Model: rea-qwen-coder ($contextSize context)"
-    Write-Host "REA: registered with OpenCode"
+    Write-Host 'REA: registered with OpenCode'
     Write-Host "Ghidra: $ghidraDir"
     Write-Host "Workspace: $workspace"
+    Write-Host "Managed OpenCode config: $openCodeConfigPath"
     Write-Host "Log: $LogFile"
 
     Stop-Transcript | Out-Null
