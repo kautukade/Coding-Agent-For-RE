@@ -28,9 +28,11 @@ jobs:
           }
           if ($failed) { throw 'PowerShell syntax validation failed.' }
 
-      - name: Validate dashboard backend syntax
+      - name: Validate dashboard and router syntax
         shell: pwsh
-        run: node --check dashboard/server.mjs
+        run: |
+          node --check dashboard/server.mjs
+          node --check dashboard/router.mjs
 
       - name: Check required entry points
         shell: pwsh
@@ -41,6 +43,7 @@ jobs:
             'START-RE-AGENT.bat',
             'UPDATE.bat',
             'dashboard/server.mjs',
+            'dashboard/router.mjs',
             'dashboard/index.html',
             'scripts/install.ps1',
             'scripts/dashboard-install.ps1',
