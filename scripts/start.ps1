@@ -55,24 +55,13 @@ function Ensure-Router {
     if (-not (Test-Path $RouterScript)) {
         throw "Hybrid router is missing: $RouterScript"
     }
-    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+    $node = Get-Command node -ErrorAction SilentlyContinue
+    if (-not $node) {
         throw 'Node.js is required to start the hybrid router.'
     }
 
     Write-Host 'Starting hybrid local + API model router ...' -ForegroundColor Cyan
-    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
-    $startInfo.FileName = (Get-Command node).Source
-    $startInfo.Arguments = "`"$RouterScript`""
-    $startInfo.WorkingDirectory = $RepoRoot
-    $startInfo.UseShellExecute = $false
-    $startInfo.CreateNoWindow = $true
-    $startInfo.Environment['RE_ROUTER_PORT'] = [string]$RouterPort
-    if ($env:OLLAMA_HOST) { $startInfo.Environment['OLLAMA_HOST'] = $env:OLLAMA_HOST }
-    if ($env:OPENCODE_CONFIG) { $startInfo.Environment['OPENCODE_CONFIG'] = $env:OPENCODE_CONFIG }
-    if ($env:GHIDRA_INSTALL_DIR) { $startInfo.Environment['GHIDRA_INSTALL_DIR'] = $env:GHIDRA_INSTALL_DIR }
-    if ($env:JAVA_HOME) { $startInfo.Environment['JAVA_HOME'] = $env:JAVA_HOME }
-    $startInfo.Environment['REA_ANALYSIS_PROVIDER'] = 'ghidra'
-    [void][System.Diagnostics.Process]::Start($startInfo)
+    Start-Process -FilePath $node.Source -ArgumentList "`"$RouterScript`"" -WorkingDirectory $RepoRoot -WindowStyle Hidden | Out-Null
 
     for ($i = 0; $i -lt 30; $i++) {
         Start-Sleep -Milliseconds 300
