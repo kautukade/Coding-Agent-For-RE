@@ -52,6 +52,14 @@ $env:OLLAMA_HOST = [string]$state.ollamaHost
 $env:GHIDRA_INSTALL_DIR = [string]$state.ghidraInstallDir
 $env:JAVA_HOME = [string]$state.javaHome
 $env:REA_ANALYSIS_PROVIDER = 'ghidra'
+$env:REA_GHIDRA_STARTUP_TIMEOUT_MS = '180000'
+$env:OPENCODE_CONFIG = [string]$state.openCodeConfig
+
+if (-not (Test-Path $env:OPENCODE_CONFIG)) {
+    Write-Host 'Managed OpenCode configuration is missing. Run INSTALL.bat to repair the installation.' -ForegroundColor Red
+    Read-Host 'Press Enter to close'
+    exit 1
+}
 
 if (-not (Get-Command ollama -ErrorAction SilentlyContinue)) {
     Write-Host 'Ollama is missing. Run INSTALL.bat to repair the installation.' -ForegroundColor Red
@@ -100,6 +108,7 @@ Write-Host "Model   : $($state.ollamaModel)"
 Write-Host "Context : $($state.context)"
 Write-Host "Ollama  : $($state.ollamaHost)"
 Write-Host "Ghidra  : $($state.ghidraInstallDir)"
+Write-Host "Config  : $($state.openCodeConfig)"
 Write-Host 'REA MCP  : configured for OpenCode'
 Write-Host ''
 
