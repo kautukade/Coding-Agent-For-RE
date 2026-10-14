@@ -32,6 +32,10 @@ The installer does the rest and launches the agent when setup finishes.
 
 > Internet access is required during the first install. Downloads are large because the local model and Ghidra are several GB combined.
 
+### Windows requirement
+
+The current installer targets **64-bit Windows 10/11** and uses the Windows Package Manager (`winget`) for Node.js, Ollama, and Java when they are missing. Modern Windows 10/11 systems with Microsoft App Installer normally already have `winget`.
+
 ## Start later
 
 Double-click:
@@ -44,6 +48,8 @@ or use the **RE Coding Agent** desktop shortcut.
 
 If no project folder is supplied, the launcher opens `%USERPROFILE%\RE-Workspace`.
 
+You can also drag a project folder onto `START-RE-AGENT.bat`; the agent opens directly in that project.
+
 ## Update / repair
 
 Double-click:
@@ -53,6 +59,16 @@ UPDATE.bat
 ```
 
 It reruns the same safe/idempotent installer and refreshes OpenCode, REA, the local model profile, and configuration.
+
+## Isolated OpenCode configuration
+
+The project uses its own managed OpenCode configuration instead of overwriting your normal OpenCode setup:
+
+```text
+%LOCALAPPDATA%\RE-Coding-Agent\config\opencode.json
+```
+
+`START-RE-AGENT.bat` automatically points OpenCode at this config. That means an existing personal OpenCode configuration remains separate.
 
 ## Local model profile
 
@@ -88,6 +104,8 @@ If no custom host exists, the standard local endpoint is used:
 
 OpenCode is then pointed at the detected Ollama OpenAI-compatible `/v1` endpoint.
 
+If the configured port is unavailable and is not a working Ollama API, the installer automatically searches a small set of local fallback ports and persists the working one.
+
 ## Ghidra
 
 REA currently requires a compatible **Ghidra 12.1.x** installation for the Windows native-analysis provider. The installer discovers the newest official 12.1.x release from `NationalSecurityAgency/ghidra`, downloads it, verifies the published SHA-256 digest when available, extracts it under:
@@ -102,19 +120,20 @@ and configures:
 GHIDRA_INSTALL_DIR
 REA_ANALYSIS_PROVIDER=ghidra
 JAVA_HOME
+REA_GHIDRA_STARTUP_TIMEOUT_MS=180000
 ```
 
-These values are also written into the OpenCode REA MCP environment so the launcher works without reopening a shell or manually setting variables.
+These values are also written into the managed OpenCode REA MCP environment so the launcher works without reopening a shell or manually setting variables.
 
 ## Files
 
 ```text
-INSTALL.bat                 One-click installer / repair entry point
-START-RE-AGENT.bat          Start local OpenCode + Ollama + REA
-UPDATE.bat                  Re-run installer to update/repair
-scripts/install.ps1         Main automated setup
-scripts/start.ps1           Runtime launcher
-.github/workflows/validate.yml  Script syntax validation
+INSTALL.bat                     One-click installer / repair entry point
+START-RE-AGENT.bat              Start local OpenCode + Ollama + REA
+UPDATE.bat                      Re-run installer to update/repair
+scripts/install.ps1             Main automated setup
+scripts/start.ps1               Runtime launcher
+.github/workflows/validate.yml  PowerShell syntax validation
 ```
 
 ## Verification
@@ -127,11 +146,13 @@ During install the script checks that:
 - REA has registered its OpenCode MCP entry
 - Ghidra and Java paths are valid
 
-A state file and logs are written under:
+A state file and timestamped logs are written under:
 
 ```text
 %LOCALAPPDATA%\RE-Coding-Agent
 ```
+
+The repository also has a Windows GitHub Actions workflow that parses every PowerShell script and checks the required entry points on each push.
 
 ## Upstream
 
@@ -139,7 +160,7 @@ REA upstream: `morluto/rea`
 
 REA is installed from the official `rea-agents` npm package. The upstream project documents Windows/OpenCode support and supports non-interactive setup with `setup --client opencode --yes`.
 
-Ghidra is downloaded only from the official `NationalSecurityAgency/ghidra` GitHub releases.
+Ghidra is downloaded only from the official `NationalSecurityAgency/ghidra` GitHub releases. A pinned official Ghidra 12.1.4 URL and published SHA-256 are retained as a fallback if the GitHub releases API is temporarily unavailable.
 
 ## Responsible use
 
