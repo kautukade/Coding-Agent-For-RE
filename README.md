@@ -1,8 +1,8 @@
 # Coding Agent for Reverse Engineering
 
-A Windows one-click setup for a **local coding agent + REA + Ghidra + Ollama** workflow.
+A Windows one-click setup for a **coding agent + REA + Ghidra + Ollama + optional cloud models** workflow.
 
-This repository is a wrapper/installer around the official upstream tools. It does **not** redistribute REA, Ghidra, Ollama, Node.js, Java, or OpenCode; the installer downloads/installs them from their official package/release channels.
+This repository is a wrapper/installer around official upstream tools. It does **not** redistribute REA, Ghidra, Ollama, Node.js, Java, or OpenCode; the installer downloads/installs them from their official package/release channels.
 
 ## What you get
 
@@ -17,7 +17,9 @@ After one run of `INSTALL.bat`, the machine is configured with:
 - Java/JDK 21+ for Ghidra
 - OpenCode configured to use the local Ollama model by default
 - REA configured to use Ghidra for supported native Windows analysis
-- A desktop shortcut named **RE Coding Agent**
+- A local browser dashboard for configuration and system status
+- Optional NVIDIA NIM, OpenRouter and Hugging Face provider configuration from the dashboard
+- Desktop shortcuts for the agent and dashboard
 - A local workspace at `%USERPROFILE%\RE-Workspace`
 
 The installer is designed to be **idempotent**: run `INSTALL.bat` again to repair/update the setup.
@@ -28,7 +30,7 @@ The installer is designed to be **idempotent**: run `INSTALL.bat` again to repai
 2. Double-click **`INSTALL.bat`**.
 3. Accept the Windows UAC elevation prompt if Windows shows it.
 
-The installer does the rest and launches the agent when setup finishes.
+The installer does the rest and opens the local dashboard when setup finishes.
 
 > Internet access is required during the first install. Downloads are large because the local model and Ghidra are several GB combined.
 
@@ -36,7 +38,61 @@ The installer does the rest and launches the agent when setup finishes.
 
 The current installer targets **64-bit Windows 10/11** and uses the Windows Package Manager (`winget`) for Node.js, Ollama, and Java when they are missing. Modern Windows 10/11 systems with Microsoft App Installer normally already have `winget`.
 
-## Start later
+## Dashboard
+
+Double-click:
+
+```text
+DASHBOARD.bat
+```
+
+or use the **RE Coding Agent Dashboard** desktop shortcut.
+
+The dashboard runs only on:
+
+```text
+http://127.0.0.1:17321
+```
+
+It includes:
+
+- live status for Ollama, OpenCode, REA MCP and Ghidra
+- current/default model information
+- launch agent and open workspace buttons
+- REA Doctor diagnostics
+- a Configuration page for cloud providers
+- NVIDIA NIM API key + model configuration
+- OpenRouter API key + model configuration
+- Hugging Face token + model configuration
+- Test Key buttons
+- default provider selection
+- automatic OpenCode config updates
+
+No manual editing of `opencode.json` is required for these provider settings.
+
+### API-key behavior
+
+Provider keys are entered in the dashboard and saved locally under the current Windows user's RE Coding Agent configuration. The dashboard never returns the full saved key back to the browser after it is stored.
+
+When `START-RE-AGENT.bat` launches OpenCode, the saved provider credentials are loaded into the process environment automatically. OpenCode provider config uses environment-variable references, so keys are not written directly into `opencode.json`.
+
+The default remains **local Qwen**. If a cloud provider is selected as default but does not have a saved key, configuration safely falls back to the local model.
+
+## REA integration
+
+REA **is integrated** into this system.
+
+The installer runs the official REA OpenCode registration and stores the resulting REA MCP entry inside this project's managed OpenCode configuration. Ghidra variables are injected into the REA MCP environment automatically.
+
+The intended chain is:
+
+```text
+OpenCode Agent -> REA MCP -> Ghidra -> Evidence / analysis
+```
+
+The dashboard's REA page shows whether that MCP registration is present and lets you run `rea doctor` without typing commands manually.
+
+## Start agent later
 
 Double-click:
 
@@ -58,7 +114,7 @@ Double-click:
 UPDATE.bat
 ```
 
-It reruns the same safe/idempotent installer and refreshes OpenCode, REA, the local model profile, and configuration.
+It reruns the same safe/idempotent installer and refreshes OpenCode, REA, the local model profile, Ghidra configuration, and dashboard setup.
 
 ## Isolated OpenCode configuration
 
@@ -128,12 +184,16 @@ These values are also written into the managed OpenCode REA MCP environment so t
 ## Files
 
 ```text
-INSTALL.bat                     One-click installer / repair entry point
-START-RE-AGENT.bat              Start local OpenCode + Ollama + REA
-UPDATE.bat                      Re-run installer to update/repair
-scripts/install.ps1             Main automated setup
-scripts/start.ps1               Runtime launcher
-.github/workflows/validate.yml  PowerShell syntax validation
+INSTALL.bat                        One-click installer / repair entry point
+DASHBOARD.bat                      Start local configuration dashboard
+START-RE-AGENT.bat                 Start OpenCode + Ollama + REA
+UPDATE.bat                         Re-run installer to update/repair
+dashboard/server.mjs               Localhost-only dashboard backend
+dashboard/index.html               Dashboard UI
+scripts/install.ps1                Main automated setup
+scripts/dashboard-install.ps1      Dashboard post-install + shortcut setup
+scripts/start.ps1                  Runtime launcher + provider-key loader
+.github/workflows/validate.yml     PowerShell and Node syntax validation
 ```
 
 ## Verification
@@ -152,7 +212,7 @@ A state file and timestamped logs are written under:
 %LOCALAPPDATA%\RE-Coding-Agent
 ```
 
-The repository also has a Windows GitHub Actions workflow that parses every PowerShell script and checks the required entry points on each push.
+The repository also has a Windows GitHub Actions workflow that parses every PowerShell script, checks the dashboard Node backend syntax, and verifies required entry points on each push.
 
 ## Upstream
 
